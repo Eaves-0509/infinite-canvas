@@ -323,6 +323,7 @@ export default {
         openAgent: "Open Agent",
         closeAgent: "Close Agent",
         plugins: "Node plugins",
+        gateway: "API Gateway",
         docs: "Documentation",
         switchLanguage: "Switch to {{language}}",
         shortcuts: "Keyboard shortcuts",

@@ -323,6 +323,7 @@ export default {
         openAgent: "打开 Agent",
         closeAgent: "收起 Agent",
         plugins: "节点插件",
+        gateway: "中转站",
         docs: "文档",
         switchLanguage: "切换到 {{language}}",
         shortcuts: "快捷键",
