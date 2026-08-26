@@ -2,6 +2,7 @@ import axios, { type AxiosRequestConfig } from "axios";
 
 import i18n from "@/i18n";
 import { buildApiUrl, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
+import { proxiedApiUrl } from "./proxy";
 
 type RequestOptions = { signal?: AbortSignal };
 
@@ -37,9 +38,22 @@ function pluginHeaders(extra?: Record<string, string>, hasJsonBody = false): Rec
     return { ...headers, ...extra };
 }
 
-function pluginUrl(config: AiConfig, path: string) {
-    if (/^https?:/i.test(path)) return path;
-    return buildApiUrl(config.baseUrl, path.startsWith("/") ? path : `/${path}`);
+function pluginUrl(config: AiConfig, path: string, params?: Record<string, unknown>) {
+    const upstreamUrl = /^https?:/i.test(path) ? path : buildApiUrl(config.baseUrl, path.startsWith("/") ? path : `/${path}`);
+    const target = new URL(upstreamUrl);
+
+    for (const [key, value] of Object.entries(params || {})) {
+        if (value === undefined || value === null) continue;
+        target.searchParams.delete(key);
+
+        if (Array.isArray(value)) {
+            value.forEach((item) => target.searchParams.append(key, String(item)));
+        } else {
+            target.searchParams.set(key, String(value));
+        }
+    }
+
+    return proxiedApiUrl(target.href);
 }
 
 function createPluginHttp(config: AiConfig, options?: RequestOptions): PluginHttp {
@@ -47,9 +61,8 @@ function createPluginHttp(config: AiConfig, options?: RequestOptions): PluginHtt
         const isForm = typeof FormData !== "undefined" && body instanceof FormData;
         const response = await axios.request({
             method,
-            url: pluginUrl(config, path),
+            url: pluginUrl(config, path, opts?.params),
             data: method === "post" ? body : undefined,
-            params: opts?.params,
             headers: pluginHeaders({ Authorization: `Bearer ${config.apiKey}`, ...opts?.headers }, method === "post" && !isForm && body !== undefined),
             responseType: opts?.responseType || "json",
             signal: options?.signal,
@@ -66,7 +79,12 @@ function createPluginHttp(config: AiConfig, options?: RequestOptions): PluginHtt
 /** Raw request with no automatic auth header — the script controls method, url, headers, body entirely. */
 function createPluginRequest(config: AiConfig, options?: RequestOptions) {
     return async (requestConfig: AxiosRequestConfig & { url: string }) => {
-        const response = await axios.request({ ...requestConfig, url: pluginUrl(config, requestConfig.url), signal: options?.signal });
+        const { url, params, ...rest } = requestConfig;
+        const response = await axios.request({
+            ...rest,
+            url: pluginUrl(config, url, params as Record<string, unknown> | undefined),
+            signal: options?.signal,
+        });
         return response.data;
     };
 }
