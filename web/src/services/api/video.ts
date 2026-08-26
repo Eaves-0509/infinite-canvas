@@ -6,6 +6,7 @@ import { dataUrlToFile } from "@/lib/image-utils";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@/stores/use-config-store";
+import { proxiedApiUrl } from "./proxy";
 import { runModelPlugin } from "./model-plugin";
 import type { ReferenceImage } from "@/types/image";
 
@@ -23,7 +24,7 @@ export type VideoGenerationTaskState = { status: "pending" } | { status: "comple
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
 
 function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
+    return proxiedApiUrl(buildApiUrl(config.baseUrl, path));
 }
 
 function aiHeaders(config: AiConfig, contentType?: string) {
