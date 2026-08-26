@@ -8,7 +8,7 @@ import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
-
+import { proxiedApiUrl } from "./proxy";
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
 export type AiTextMessage = {
@@ -334,7 +334,7 @@ function withSystemPrompt(config: AiConfig, prompt: string) {
 }
 
 function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
+    return proxiedApiUrl(buildApiUrl(config.baseUrl, path));
 }
 
 function aiHeaders(config: AiConfig, contentType?: string) {
@@ -356,8 +356,8 @@ function geminiModelName(model: string) {
 
 function geminiApiUrl(config: Pick<AiConfig, "baseUrl" | "model">, action?: "generateContent" | "streamGenerateContent") {
     const baseUrl = geminiBaseUrl(config);
-    if (!action) return `${baseUrl}/models`;
-    return `${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model))}:${action}`;
+    if (!action) return proxiedApiUrl(`${baseUrl}/models`);
+return proxiedApiUrl(`${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model))}:${action}`);
 }
 
 function geminiHeaders(config: Pick<AiConfig, "apiKey">) {
