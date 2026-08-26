@@ -9,6 +9,7 @@ import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
 import { proxiedApiUrl } from "./proxy";
+import { proxiedApiUrl } from "./proxy";
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
 export type AiTextMessage = {
