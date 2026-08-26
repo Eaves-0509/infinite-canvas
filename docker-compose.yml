@@ -7,8 +7,22 @@ services:
     container_name: infinite-canvas
     ports:
       - "3000:3000"
+    depends_on:
+      - ai-proxy
     restart: unless-stopped
     # 统计分析（可选，默认关闭）。每家一个独立变量，填了谁就启用谁，可同时启用多家：
     # environment:
     #   ANALYTICS_GA4_ID: G-XXXXXXXXXX                    # Google Analytics 4 衡量 ID
     #   ANALYTICS_BAIDU_ID: xxxxxxxxxxxxxxxxxxxxxxxxxxxx   # 百度统计站点 ID
+
+  ai-proxy:
+    build:
+      context: .
+      dockerfile: proxy/Dockerfile
+    expose:
+      - "4000"
+    environment:
+      PROXY_MAX_BODY_BYTES: "26214400"
+      PROXY_TIMEOUT_MS: "300000"
+      PROXY_RATE_LIMIT: "60"
+    restart: unless-stopped
