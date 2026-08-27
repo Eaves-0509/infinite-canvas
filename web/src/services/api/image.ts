@@ -238,8 +238,10 @@ function resolveImageDataUrl(item: Record<string, unknown>) {
         return `data:image/png;base64,${item.b64_json}`;
     }
     if (typeof item.url === "string" && item.url) {
-        return item.url;
-    }
+    const url = item.url.trim();
+    if (url.startsWith("/api/proxy?") || url.startsWith("data:")) return url;
+    return /^https:\/\//i.test(url) ? proxiedApiUrl(url) : url;
+}
     return null;
 }
 
