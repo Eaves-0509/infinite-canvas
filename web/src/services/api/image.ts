@@ -9,7 +9,6 @@ import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
 import { proxiedApiUrl } from "./proxy";
-import { proxiedApiUrl } from "./proxy";
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
 export type AiTextMessage = {
@@ -306,6 +305,7 @@ function readAxiosError(error: unknown, fallback: string) {
     if (axios.isCancel(error)) return apiText("requestCanceled");
     if (axios.isAxiosError(error)) {
         if (!error.response && error.code === "ERR_NETWORK") return apiText("corsRequired");
+        if (error.response?.status === 413) return apiText("requestTooLarge");
         const responseData = error.response?.data;
         // Prefer the API error from the response body.
         const apiMsg = readApiErrorMessage(responseData);
@@ -321,6 +321,7 @@ function readAxiosError(error: unknown, fallback: string) {
 }
 
 function readStatusError(status: number | undefined, fallback: string) {
+    if (status === 413) return apiText("requestTooLarge");
     if (status === 401 || status === 403) return apiText("authenticationFailed");
     if (status === 429) return apiText("rateLimited");
     if (status === 404) return apiText("notFound");
@@ -442,6 +443,7 @@ function validateGeminiPayload(payload: GeminiPayload) {
 }
 
 async function readFetchError(response: Response, fallback: string) {
+    if (response.status === 413) return apiText("requestTooLarge");
     const text = await response.text();
     if (!text) return readStatusError(response.status, fallback);
     try {

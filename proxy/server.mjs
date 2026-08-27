@@ -69,24 +69,31 @@ function readBody(request) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
+    let tooLarge = false;
 
     request.on("data", (chunk) => {
       size += chunk.length;
 
       if (size > MAX_BODY_BYTES) {
-        reject(
-          Object.assign(new Error("Request body is too large"), {
-            status: 413,
-          }),
-        );
-        request.destroy();
+        tooLarge = true;
         return;
       }
 
       chunks.push(chunk);
     });
 
-    request.on("end", () => resolve(Buffer.concat(chunks)));
+    request.on("end", () => {
+      if (tooLarge) {
+        reject(
+          Object.assign(new Error("Request body is too large"), {
+            status: 413,
+          }),
+        );
+        return;
+      }
+
+      resolve(Buffer.concat(chunks));
+    });
     request.on("error", reject);
   });
 }
