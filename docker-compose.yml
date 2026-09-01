@@ -23,6 +23,6 @@ services:
       - "4000"
     environment:
       PROXY_MAX_BODY_BYTES: "26214400"
-      PROXY_TIMEOUT_MS: "300000"
+      PROXY_TIMEOUT_MS: "900000"
       PROXY_RATE_LIMIT: "60"
     restart: unless-stopped
