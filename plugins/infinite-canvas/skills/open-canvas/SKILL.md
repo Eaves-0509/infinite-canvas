@@ -12,7 +12,7 @@ description: 打开 Infinite Canvas 在线或本地画布，并自动连接本�
 1. 启动本地 Canvas Agent 并保持运行：
 
 ```bash
-npx -y @basketikun/canvas-agent
+npx -y @basketikun/canvas-agent@latest
 ```
 
 2. 从启动输出取得 `Local URL` 和 `Connect token`。
@@ -36,7 +36,7 @@ bun run dev
 2. 启动本地 Canvas Agent：
 
 ```bash
-npx -y @basketikun/canvas-agent
+npx -y @basketikun/canvas-agent@latest
 ```
 
 3. 从启动输出取得 `Local URL` 和 `Connect token`，在 Codex 右侧浏览器打开：
