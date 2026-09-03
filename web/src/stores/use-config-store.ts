@@ -43,6 +43,7 @@ export type AiConfig = {
     vquality: string;
     videoGenerateAudio: string;
     videoWatermark: string;
+    videoMode: string;
     systemPrompt: string;
     reasoningEffort: ReasoningEffort;
     models: string[];
@@ -51,6 +52,8 @@ export type AiConfig = {
     background: string;
     count: string;
     canvasImageCount: string;
+    proxyEnabled: boolean;
+    proxyUrl: string;
 };
 
 export type WebdavSyncConfig = {
@@ -60,7 +63,7 @@ export type WebdavSyncConfig = {
     directory: string;
     lastSyncedAt: string;
 };
-export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "webdav" | "local-storage";
+export type ConfigTabKey = "channels" | "local-proxy" | "preferences" | "prompt-sources" | "webdav" | "local-storage";
 
 export type ChannelCredentialsImportResult = {
     status: "created" | "updated" | "missing-base-url" | "invalid-base-url";
@@ -72,6 +75,8 @@ const CHANNEL_MODEL_SEPARATOR = "::";
 const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
 const GROK_BASE_URL = "https://api.x.ai/v1";
+export const LOCAL_PROXY_PACKAGE = "@basketikun/canvas-proxy";
+export const DEFAULT_LOCAL_PROXY_URL = "http://127.0.0.1:23210";
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
@@ -106,6 +111,7 @@ export const defaultConfig: AiConfig = {
     vquality: "720",
     videoGenerateAudio: "true",
     videoWatermark: "false",
+    videoMode: "frames",
     systemPrompt: "",
     reasoningEffort: "auto",
     models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
@@ -114,6 +120,8 @@ export const defaultConfig: AiConfig = {
     background: "",
     count: "1",
     canvasImageCount: "3",
+    proxyEnabled: false,
+    proxyUrl: DEFAULT_LOCAL_PROXY_URL,
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {
@@ -262,7 +270,10 @@ export const useConfigStore = create<ConfigStore>()(
                         vquality: config.vquality || "720",
                         videoGenerateAudio: config.videoGenerateAudio || "true",
                         videoWatermark: config.videoWatermark || "false",
+                        videoMode: config.videoMode === "reference" ? "reference" : "frames",
                         canvasImageCount: config.canvasImageCount || "3",
+                        proxyEnabled: Boolean(config.proxyEnabled),
+                        proxyUrl: config.proxyUrl || DEFAULT_LOCAL_PROXY_URL,
                     },
                 };
             },
@@ -468,5 +479,20 @@ export function buildApiUrl(baseUrl: string, path: string) {
     const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
     const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
     const apiBaseUrl = lowerBaseUrl.endsWith("/v1") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
-    return `${apiBaseUrl}${path}`;
+    return withLocalProxy(`${apiBaseUrl}${path}`);
+}
+
+export function normalizeLocalProxyUrl(value: string) {
+    const trimmed = value.trim().replace(/\/+$/, "");
+    if (!trimmed) return "";
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
+/** Prefix an outgoing request with the local forwarding proxy so the browser is not blocked by CORS. */
+export function withLocalProxy(url: string) {
+    const { proxyEnabled, proxyUrl } = useConfigStore.getState().config;
+    if (!proxyEnabled || !/^https?:\/\//i.test(url)) return url;
+    const base = normalizeLocalProxyUrl(proxyUrl);
+    if (!base || url.startsWith(`${base}/`)) return url;
+    return `${base}/${url}`;
 }

@@ -9,6 +9,7 @@ import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
 import { proxiedApiUrl } from "./proxy";
+
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
 export type AiTextMessage = {
@@ -204,7 +205,7 @@ function resolveGeminiImageConfig(config: AiConfig) {
     const aspectRatio = value && value.toLowerCase() !== "auto" ? closestGeminiAspectRatio(ratio) : undefined;
     const imageSize = supportsGeminiImageSize(config.model) ? resolveGeminiImageSize(config.quality, dimensions) : undefined;
     const image = { ...(aspectRatio ? { aspectRatio } : {}), ...(imageSize ? { imageSize } : {}) };
-    return Object.keys(image).length ? { responseFormat: { image } } : {};
+    return Object.keys(image).length ? { imageConfig: image } : {};
 }
 
 function closestGeminiAspectRatio(value: string) {
@@ -233,15 +234,13 @@ function supportsGeminiImageSize(model: string) {
     return value.includes("gemini-3") || value.includes("3.1") || value.includes("3-pro");
 }
 
-function resolveImageDataUrl(item: Record<string, unknown>) {
+function resolveImageSource(item: Record<string, unknown>) {
     if (typeof item.b64_json === "string" && item.b64_json) {
         return `data:image/png;base64,${item.b64_json}`;
     }
     if (typeof item.url === "string" && item.url) {
-    const url = item.url.trim();
-    if (url.startsWith("/api/proxy?") || url.startsWith("data:")) return url;
-    return /^https:\/\//i.test(url) ? proxiedApiUrl(url) : url;
-}
+        return item.url;
+    }
     return null;
 }
 
@@ -254,11 +253,10 @@ function parseImagePayload(payload: ImageApiResponse) {
         || (payload as Record<string, unknown>).images as Array<Record<string, unknown>> | undefined
         || (payload as Record<string, unknown>).results as Array<Record<string, unknown>> | undefined
         || [];
-    const images =
-        imageList
-            .map(resolveImageDataUrl)
-            .filter((value): value is string => Boolean(value))
-            .map((dataUrl) => ({ id: nanoid(), dataUrl }));
+    const images = imageList
+        .map(resolveImageSource)
+        .filter((value): value is string => Boolean(value))
+        .map((dataUrl) => ({ id: nanoid(), dataUrl }));
 
     if (images.length === 0) {
         // Check whether the response contains data in an unrecognized format.
@@ -306,8 +304,7 @@ function readApiErrorMessage(value: unknown): string {
 function readAxiosError(error: unknown, fallback: string) {
     if (axios.isCancel(error)) return apiText("requestCanceled");
     if (axios.isAxiosError(error)) {
-        if (!error.response && error.code === "ERR_NETWORK") return apiText("corsRequired");
-        if (error.response?.status === 413) return apiText("requestTooLarge");
+        if (!error.response && error.code === "ERR_NETWORK") return apiText("requestFailed");
         const responseData = error.response?.data;
         // Prefer the API error from the response body.
         const apiMsg = readApiErrorMessage(responseData);
@@ -323,7 +320,6 @@ function readAxiosError(error: unknown, fallback: string) {
 }
 
 function readStatusError(status: number | undefined, fallback: string) {
-    if (status === 413) return apiText("requestTooLarge");
     if (status === 401 || status === 403) return apiText("authenticationFailed");
     if (status === 429) return apiText("rateLimited");
     if (status === 404) return apiText("notFound");
@@ -338,7 +334,7 @@ function withSystemPrompt(config: AiConfig, prompt: string) {
 }
 
 function aiApiUrl(config: AiConfig, path: string) {
-    return proxiedApiUrl(buildApiUrl(config.baseUrl, path));
+    return buildApiUrl(config.baseUrl, path);
 }
 
 function aiHeaders(config: AiConfig, contentType?: string) {
@@ -361,7 +357,7 @@ function geminiModelName(model: string) {
 function geminiApiUrl(config: Pick<AiConfig, "baseUrl" | "model">, action?: "generateContent" | "streamGenerateContent") {
     const baseUrl = geminiBaseUrl(config);
     if (!action) return proxiedApiUrl(`${baseUrl}/models`);
-return proxiedApiUrl(`${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model))}:${action}`);
+    return proxiedApiUrl(`${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model))}:${action}`);
 }
 
 function geminiHeaders(config: Pick<AiConfig, "apiKey">) {
@@ -445,7 +441,6 @@ function validateGeminiPayload(payload: GeminiPayload) {
 }
 
 async function readFetchError(response: Response, fallback: string) {
-    if (response.status === 413) return apiText("requestTooLarge");
     const text = await response.text();
     if (!text) return readStatusError(response.status, fallback);
     try {
@@ -723,7 +718,6 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const script = resolveModelScript(config, config.model || config.imageModel);
-    if (requestConfig.apiFormat === "custom" && !script) throw new Error(apiText("customScriptRequired"));
     if (script) {
         const quality = normalizeQuality(config.quality);
         const requestSize = resolveRequestSize(quality, config.size);
@@ -772,19 +766,18 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
                 signal: options?.signal,
             },
         );
-        const images = parseImagePayload(response.data);
+        const images = await parseImagePayload(response.data);
         return images;
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("requestFailed")));
     }
 }
 
-export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage, options?: RequestOptions) {
+export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], options?: RequestOptions) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const requestPrompt = buildImageReferencePromptText(prompt, references);
     const script = resolveModelScript(config, config.model || config.imageModel);
-    if (requestConfig.apiFormat === "custom" && !script) throw new Error(apiText("customScriptRequired"));
     if (script) {
         const quality = normalizeQuality(config.quality);
         const requestSize = resolveRequestSize(quality, config.size);
@@ -806,7 +799,6 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         }
     }
     if (requestConfig.apiFormat === "gemini") {
-        if (mask) throw new Error(apiText("geminiMaskUnsupported"));
         try {
             return await requestGeminiImages(requestConfig, requestPrompt, references, n, options);
         } catch (error) {
@@ -821,10 +813,10 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     formData.set("model", requestConfig.model);
     formData.set("prompt", withSystemPrompt(requestConfig, requestPrompt));
     formData.set("n", String(n));
-   // gpt-image models reject response_format; they always return b64.
-   if (!/gpt-image/.test(requestConfig.model)) {
-       formData.set("response_format", "b64_json");
-   }
+    // gpt-image models reject response_format; they always return b64.
+    if (!/gpt-image/.test(requestConfig.model)) {
+        formData.set("response_format", "b64_json");
+    }
     formData.set("output_format", IMAGE_OUTPUT_FORMAT);
     if (quality) {
         formData.set("quality", quality);
@@ -836,12 +828,12 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         formData.set("background", background);
     }
     const files = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
-    files.forEach((file) => formData.append("image", file));
-    if (mask) formData.set("mask", dataUrlToFile(mask));
+    const imageField = files.length > 1 ? "image[]" : "image";
+    files.forEach((file) => formData.append(imageField, file));
 
     try {
         const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), formData, { headers: aiHeaders(requestConfig), signal: options?.signal });
-        const images = parseImagePayload(response.data);
+        const images = await parseImagePayload(response.data);
         return images;
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("requestFailed")));
@@ -887,7 +879,6 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
 }
 
 export async function fetchImageModels(config: Pick<AiConfig, "baseUrl" | "apiKey" | "apiFormat">) {
-    if (config.apiFormat === "custom") throw new Error(apiText("customModelListManual"));
     try {
         if (config.apiFormat === "gemini") {
             const response = await axios.get<GeminiPayload>(geminiApiUrl({ ...defaultGeminiConfig, ...config }), { headers: geminiHeaders({ ...defaultGeminiConfig, ...config }) });
@@ -897,7 +888,7 @@ export async function fetchImageModels(config: Pick<AiConfig, "baseUrl" | "apiKe
                 .filter((id): id is string => Boolean(id))
                 .sort((a, b) => a.localeCompare(b));
         }
-       const response = await axios.get<{ data?: Array<{ id?: string }>; error?: { message?: string } }>(proxiedApiUrl(buildApiUrl(config.baseUrl, "/models")), {
+        const response = await axios.get<{ data?: Array<{ id?: string }>; error?: { message?: string } }>(buildApiUrl(config.baseUrl, "/models"), {
             headers: {
                 Authorization: `Bearer ${config.apiKey}`,
             },
