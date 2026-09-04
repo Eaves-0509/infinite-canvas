@@ -338,6 +338,7 @@ export default {
         openAgent: "Open Agent",
         closeAgent: "Close Agent",
         plugins: "Node plugins",
+        gateway: "Low-cost Image API",
         docs: "Documentation",
         switchLanguage: "Switch to {{language}}",
         shortcuts: "Keyboard shortcuts",
