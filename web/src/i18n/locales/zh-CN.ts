@@ -338,6 +338,7 @@ export default {
         openAgent: "打开 Agent",
         closeAgent: "收起 Agent",
         plugins: "节点插件",
+        gateway: "低价生图API",
         docs: "文档",
         switchLanguage: "切换到 {{language}}",
         shortcuts: "快捷键",
